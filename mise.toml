@@ -5,3 +5,193 @@ idiomatic_version_file_enable_tools = ["rust"]
 [tools]
 "cargo:cargo-generate" = "latest"
 "cargo:ravedude" = "latest"
+
+[hooks]
+postinstall = { task = "install-avr-toolchain" }
+
+[tasks.install-avr-toolchain]
+description = "Install avr-gcc/avr-libc/binutils and avrdude"
+run = '''
+set -eu
+
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+  else
+    echo "Need root privileges to run: $*" >&2
+    exit 1
+  fi
+}
+
+install_apt() {
+  as_root apt-get update
+  as_root apt-get install -y gcc-avr binutils-avr avr-libc avrdude
+}
+
+install_dnf() {
+  as_root dnf install -y avr-gcc avr-binutils avr-libc avrdude
+}
+
+install_yum() {
+  as_root yum install -y avr-gcc avr-binutils avr-libc avrdude
+}
+
+install_pacman() {
+  as_root pacman -S --needed --noconfirm avr-gcc avr-binutils avr-libc avrdude
+}
+
+install_apk() {
+  as_root apk add --no-cache gcc-avr binutils-avr avr-libc avrdude
+}
+
+install_brew() {
+  brew tap osx-cross/avr
+  brew install avrdude avr-binutils avr-gcc@15 || brew install avrdude avr-binutils avr-gcc
+}
+
+if command -v avr-gcc >/dev/null 2>&1 && command -v avrdude >/dev/null 2>&1; then
+  echo "avr-gcc and avrdude are already available in PATH."
+  exit 0
+fi
+
+if command -v apt-get >/dev/null 2>&1; then
+  install_apt
+elif command -v dnf >/dev/null 2>&1; then
+  install_dnf
+elif command -v yum >/dev/null 2>&1; then
+  install_yum
+elif command -v pacman >/dev/null 2>&1; then
+  install_pacman
+elif command -v apk >/dev/null 2>&1; then
+  install_apk
+elif command -v brew >/dev/null 2>&1; then
+  install_brew
+else
+  echo "Unsupported platform, you may need to set up the tool chain manually." >&2
+  echo "Supported managers: apt-get, dnf, yum, pacman, apk, brew." >&2
+  exit 1
+fi
+
+echo
+if command -v avr-gcc >/dev/null 2>&1; then
+  avr-gcc --version | sed -n '1p'
+fi
+
+if command -v avrdude >/dev/null 2>&1; then
+  echo "avrdude: $(command -v avrdude)"
+fi
+'''
+run_windows = '''
+@echo off
+setlocal EnableExtensions
+
+set "NEED_AVR_GCC=1"
+set "NEED_AVRDUDE=1"
+
+where avr-gcc >nul 2>&1
+if not errorlevel 1 set "NEED_AVR_GCC=0"
+
+where avrdude >nul 2>&1
+if not errorlevel 1 set "NEED_AVRDUDE=0"
+
+if "%NEED_AVR_GCC%"=="0" if "%NEED_AVRDUDE%"=="0" (
+  echo avr-gcc and avrdude are already available in PATH.
+  exit /b 0
+)
+
+if "%NEED_AVRDUDE%"=="1" (
+  where winget >nul 2>&1
+  if not errorlevel 1 (
+    winget install -e --id AVRDudes.AVRDUDE --accept-package-agreements --accept-source-agreements
+    where avrdude >nul 2>&1
+    if not errorlevel 1 set "NEED_AVRDUDE=0"
+  )
+)
+
+if "%NEED_AVRDUDE%"=="1" (
+  where scoop >nul 2>&1
+  if not errorlevel 1 (
+    scoop install avrdude
+    where avrdude >nul 2>&1
+    if not errorlevel 1 set "NEED_AVRDUDE=0"
+  )
+)
+
+set "MSYS_ROOT="
+
+if exist "C:\msys64\usr\bin\bash.exe" set "MSYS_ROOT=C:\msys64"
+if not defined MSYS_ROOT if exist "%USERPROFILE%\scoop\apps\msys2\current\usr\bin\bash.exe" set "MSYS_ROOT=%USERPROFILE%\scoop\apps\msys2\current"
+
+if defined MSYS_ROOT (
+  if "%NEED_AVR_GCC%"=="1" if exist "%MSYS_ROOT%\ucrt64\bin\avr-gcc.exe" set "NEED_AVR_GCC=0"
+  if "%NEED_AVRDUDE%"=="1" if exist "%MSYS_ROOT%\ucrt64\bin\avrdude.exe" set "NEED_AVRDUDE=0"
+)
+
+if "%NEED_AVR_GCC%"=="0" if "%NEED_AVRDUDE%"=="0" (
+  echo avr-gcc and avrdude are already installed.
+  echo They may not both be in PATH yet.
+  if defined MSYS_ROOT (
+    echo MSYS2 UCRT64 bin: "%MSYS_ROOT%\ucrt64\bin"
+  )
+  exit /b 0
+)
+
+if not defined MSYS_ROOT (
+  where winget >nul 2>&1
+  if not errorlevel 1 (
+    winget install -e --id MSYS2.MSYS2 --accept-package-agreements --accept-source-agreements
+    if exist "C:\msys64\usr\bin\bash.exe" set "MSYS_ROOT=C:\msys64"
+  )
+)
+
+if not defined MSYS_ROOT (
+  where scoop >nul 2>&1
+  if not errorlevel 1 (
+    scoop install msys2
+    if exist "%USERPROFILE%\scoop\apps\msys2\current\usr\bin\bash.exe" set "MSYS_ROOT=%USERPROFILE%\scoop\apps\msys2\current"
+  )
+)
+
+if not defined MSYS_ROOT (
+  echo Could not find or install MSYS2.
+  echo avr-gcc still missing, or avrdude native install failed.
+  exit /b 1
+)
+
+set "MSYS_PKGS="
+
+if "%NEED_AVR_GCC%"=="1" (
+  set "MSYS_PKGS=%MSYS_PKGS% mingw-w64-ucrt-x86_64-avr-gcc mingw-w64-ucrt-x86_64-avr-libc"
+)
+
+if "%NEED_AVRDUDE%"=="1" (
+  if not exist "%MSYS_ROOT%\ucrt64\bin\avrdude.exe" (
+    set "MSYS_PKGS=%MSYS_PKGS% mingw-w64-ucrt-x86_64-avrdude"
+  )
+)
+
+if defined MSYS_PKGS (
+  "%MSYS_ROOT%\usr\bin\bash.exe" -lc "pacman -S --needed --noconfirm %MSYS_PKGS%"
+)
+
+echo.
+if exist "%MSYS_ROOT%\ucrt64\bin\avr-gcc.exe" (
+  echo avr-gcc: %MSYS_ROOT%\ucrt64\bin\avr-gcc.exe
+) else (
+  where avr-gcc >nul 2>&1 && echo avr-gcc is available in PATH.
+)
+
+if exist "%MSYS_ROOT%\ucrt64\bin\avrdude.exe" (
+  echo avrdude: %MSYS_ROOT%\ucrt64\bin\avrdude.exe
+) else (
+  where avrdude >nul 2>&1 && echo avrdude is available in PATH.
+)
+
+if exist "%MSYS_ROOT%\ucrt64\bin\avr-gcc.exe" (
+  echo Add "%MSYS_ROOT%\ucrt64\bin" to PATH if you want to call the MSYS2 tools directly from cmd or PowerShell.
+)
+
+endlocal
+'''

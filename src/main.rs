@@ -1,17 +1,14 @@
 #![no_std]
 #![no_main]
+#![feature(asm_experimental_arch)]
 
 use panic_halt as _;
+use crate::w2 as entry;
 
 #[arduino_hal::entry]
-fn test() -> ! {
-    let dp = arduino_hal::Peripherals::take().unwrap();
-    let pins = arduino_hal::pins!(dp);
-
-    let mut led = pins.d13.into_output();
-
-    loop {
-        led.toggle();
-        arduino_hal::delay_ms(500);
-    }
+fn main() -> ! {
+    entry::run();
 }
+
+mod f03a;
+mod w2;
