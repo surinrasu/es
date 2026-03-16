@@ -219,10 +219,20 @@ version = "0.1.0"
 dependencies = [
  "arduino-hal",
  "avr-device",
+ "es-entry",
  "nb 1.1.0",
  "panic-halt",
  "smart-leds",
  "ufmt",
+]
+
+[[package]]
+name = "es-entry"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.110",
 ]
 
 [[package]]

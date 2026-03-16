@@ -16,6 +16,7 @@ ufmt = "0.2.0"
 nb = "1.1.0"
 avr-device = { version = "0.8.1", features = ["atmega2560"] }
 smart-leds = "0.4.0"
+es-entry = { path = "es-entry" }
 
 [dependencies.arduino-hal]
 git = "https://github.com/rahix/avr-hal"

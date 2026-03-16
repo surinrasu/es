@@ -33,26 +33,23 @@ winget install AVRDudes.AVRDUDE ZakKemble.avr-gcc
 
 Then you can just make a normal `cargo build` or directly `cargo run` if the board is already connected.
 
-If automatic port detection does not work on your machine, you can point `ravedude` to the port explicitly:
+If automatic port detection does not work on your machine, you can use env varible `RAVEDUDE_PORT` to set explicitly. It usually looks like `/dev/cu.usbmodem2101` on Unix or `COM3` on Windows.
 
-```shell
-RAVEDUDE_PORT=/dev/cu.usbmodem2101 cargo run --release
-```
-
-On Windows, the port name will usually look like `COM3` or `COM4`.
-
-Right now the active entry is selected in `src/main.rs`:
+Currently the active entry is selected in `src/main.rs`:
 
 ```rust
-use crate::w2 as entry;
+#[es_entry::module(foo)]
+fn main() -> ! {
+    entry::run();
+}
 ```
 
-You can change the entry module with a different use:
+You may change the entry by switching the attribute argument:
 
 ```rust
-use crate::test as entry
+#[es_entry::module(bar)]
 ```
 
 ## License
 
-This repo is licensed under the MIT License.
+This repo is licensed under MIT License.
