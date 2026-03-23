@@ -1,9 +1,11 @@
-use smart_leds::RGB8;
+use core::{arch::asm, convert::Infallible};
+
+use arduino_hal::port::{mode, Pin, PinOps};
+use smart_leds::{RGB8, SmartLedsWrite};
 
 pub(crate) const LED_N: usize = 12;
 pub(crate) const OFF: RGB8 = RGB8 { r: 0, g: 0, b: 0 };
 
-const RNG_FALLBACK_SEED: u32 = 0xC0DE_2560;
 const SOFT_MAX_INTENSITY: f32 = 48.0;
 const LAB_DELTA: f32 = 6.0 / 29.0;
 const D65_X: f32 = 0.95047;
@@ -12,6 +14,9 @@ const D65_Z: f32 = 1.08883;
 const PI: f32 = core::f32::consts::PI;
 const HALF_PI: f32 = core::f32::consts::FRAC_PI_2;
 const TAU: f32 = PI * 2.0;
+const MEGA2560_D51_PORT_IO: u8 = 0x05;
+const MEGA2560_D51_PIN_BIT: u8 = 2;
+const LATCH_DELAY_US: u32 = 80;
 
 struct Lab {
     lightness: f32,
@@ -35,67 +40,98 @@ pub(crate) const fn blank_frame() -> [RGB8; LED_N] {
     [OFF; LED_N]
 }
 
-pub(crate) struct XorShift32 {
-    state: u32,
+pub(crate) struct HsF12a<PIN> {
+    leds: Mega2560Ws2812<PIN>,
 }
 
-impl XorShift32 {
-    pub(crate) const fn new(seed: u32) -> Self {
-        let state = if seed == 0 { RNG_FALLBACK_SEED } else { seed };
-        Self { state }
-    }
-
-    fn next_u32(&mut self) -> u32 {
-        let mut x = self.state;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-
-        if x == 0 {
-            x = RNG_FALLBACK_SEED;
+impl<PIN: PinOps> HsF12a<PIN> {
+    pub(crate) fn new(data: Pin<mode::Output, PIN>) -> Self {
+        Self {
+            leds: Mega2560Ws2812::new(data),
         }
-
-        self.state = x;
-        x
     }
 
-    pub(crate) fn next_index(&mut self, upper: usize) -> usize {
-        (self.next_u32() as usize) % upper
-    }
-
-    pub(crate) fn next_unit_f32(&mut self) -> f32 {
-        self.next_u32() as f32 / u32::MAX as f32
+    pub(crate) fn write(&mut self, frame: &[RGB8; LED_N]) {
+        let _ = self.leds.write(frame.iter().copied());
     }
 }
 
-pub(crate) fn seed_rng() -> u32 {
-    let timer_seed = unsafe { (*arduino_hal::pac::TC0::ptr()).tcnt0().read().bits() as u32 };
-    timer_seed ^ RNG_FALLBACK_SEED
+struct Mega2560Ws2812<PIN> {
+    data: Pin<mode::Output, PIN>,
 }
 
-pub(crate) fn pick_distinct_leds<const N: usize>(
-    rng: &mut XorShift32,
-    active_leds: &mut [usize; N],
-) {
-    let mut candidate_leds: [usize; LED_N] = core::array::from_fn(|index| index);
-    let count = core::cmp::min(N, LED_N);
+impl<PIN: PinOps> Mega2560Ws2812<PIN> {
+    pub(crate) fn new(mut data: Pin<mode::Output, PIN>) -> Self {
+        data.set_low();
+        Self { data }
+    }
 
-    for slot in 0..count {
-        let pick = slot + rng.next_index(LED_N - slot);
-        candidate_leds.swap(slot, pick);
-        active_leds[slot] = candidate_leds[slot];
+    #[inline(always)]
+    unsafe fn write_byte(byte: u8) {
+        asm!(
+            "ldi {count}, 8",
+            "2:",
+            "sbi {port}, {bit}",
+            "nop",
+            "sbrs {byte}, 7",
+            "cbi {port}, {bit}",
+            "nop",
+            "nop",
+            "sbrc {byte}, 7",
+            "cbi {port}, {bit}",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "nop",
+            "lsl {byte}",
+            "dec {count}",
+            "brne 2b",
+            byte = inout(reg_upper) byte => _,
+            count = lateout(reg_upper) _,
+            port = const MEGA2560_D51_PORT_IO,
+            bit = const MEGA2560_D51_PIN_BIT,
+            options(nostack),
+        );
+    }
+
+    fn latch(&mut self) {
+        self.data.set_low();
+        arduino_hal::delay_us(LATCH_DELAY_US);
+    }
+}
+
+impl<PIN: PinOps> SmartLedsWrite for Mega2560Ws2812<PIN> {
+    type Error = Infallible;
+    type Color = RGB8;
+
+    fn write<T, I>(&mut self, iterator: T) -> Result<(), Self::Error>
+    where
+        T: IntoIterator<Item = I>,
+        I: Into<Self::Color>,
+    {
+        avr_device::interrupt::free(|_| unsafe {
+            for pixel in iterator {
+                let pixel = pixel.into();
+                Self::write_byte(pixel.g);
+                Self::write_byte(pixel.r);
+                Self::write_byte(pixel.b);
+            }
+        });
+
+        self.latch();
+        Ok(())
     }
 }
 
 pub(crate) fn fill_spaced_palette<const N: usize>(
-    rng: &mut XorShift32,
     colors: &mut [RGB8; N],
+    base_hue: f32,
     lightness: f32,
     chroma: f32,
     hue_step_degrees: f32,
 ) {
-    let base_hue = rng.next_unit_f32() * 360.0;
-
     for (slot, color) in colors.iter_mut().enumerate() {
         let hue = base_hue + slot as f32 * hue_step_degrees;
         *color = lch_to_rgb(lightness, chroma, hue);
@@ -194,19 +230,4 @@ fn wrap_radians(mut angle: f32) -> f32 {
 
 fn abs_f32(value: f32) -> f32 {
     if value < 0.0 { -value } else { value }
-}
-
-pub(crate) fn render_phase(
-    frame: &mut [RGB8; LED_N],
-    active_leds: &[usize],
-    active_colors: &[RGB8],
-    phase: usize,
-) {
-    frame.fill(OFF);
-
-    for (slot, (&led, &color)) in active_leds.iter().zip(active_colors.iter()).enumerate() {
-        if slot % 2 == phase % 2 {
-            frame[led] = color;
-        }
-    }
 }
