@@ -52,6 +52,8 @@ You may change the entry by switching the attribute argument:
 #[es_entry::module(bar)]
 ```
 
+For test, there are some unit tests can be ran directly with `cargo test`, and you can run simulation test for active entry with `mise run sim-test` as well.
+
 ## License
 
 Published by [Rinsu Su](https://github.com/surinrasu) under [the MIT License](https://raw.githubusercontent.com/surinrasu/es/refs/heads/master/LICENSE).

@@ -3,18 +3,34 @@ use core::cell::Cell;
 use avr_device::interrupt::Mutex;
 use arduino_hal::port::{mode, Pin};
 
+#[es_sim::export]
 pub(crate) const KEY_N: usize = 4;
 pub(crate) const RELEASED: bool = false;
 #[allow(dead_code)]
 pub(crate) const PRESSED: bool = true;
 
+#[es_sim::export]
+pub(crate) const DEBOUNCE_MS: u32 = 30;
+#[es_sim::export]
+pub(crate) const LONG_PRESS_MS: u32 = 650;
+#[es_sim::export]
 pub(crate) const SW1: usize = 0;
+#[es_sim::export]
 pub(crate) const SW2: usize = 1;
+#[es_sim::export]
 pub(crate) const SW3: usize = 2;
+#[es_sim::export]
 pub(crate) const SW4: usize = 3;
 
-const DEBOUNCE_MS: u32 = 30;
-const LONG_PRESS_MS: u32 = 650;
+#[es_sim::export]
+pub(crate) const SW1_PIN: es_sim::DigitalPin = es_sim::DigitalPin::new('E', 4);
+#[es_sim::export]
+pub(crate) const SW2_PIN: es_sim::DigitalPin = es_sim::DigitalPin::new('E', 5);
+#[es_sim::export]
+pub(crate) const SW3_PIN: es_sim::DigitalPin = es_sim::DigitalPin::new('D', 3);
+#[es_sim::export]
+pub(crate) const SW4_PIN: es_sim::DigitalPin = es_sim::DigitalPin::new('D', 2);
+
 const SW1_PINE_BIT: u8 = register_bit(4);
 const SW2_PINE_BIT: u8 = register_bit(5);
 const SW3_PIND_BIT: u8 = register_bit(3);

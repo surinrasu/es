@@ -1,0 +1,18 @@
+[package]
+name = "es-sim"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+
+[features]
+default = ["std"]
+std = ["dep:avr-simulator"]
+
+[dependencies]
+avr-simulator = { version = "0.6.2", optional = true }
+es-sim-macros = { path = "es-sim-macros" }
+
+[build-dependencies]
+proc-macro2 = "1.0.106"
+quote = "1.0.45"
+syn = { version = "2.0.110", features = ["full"] }

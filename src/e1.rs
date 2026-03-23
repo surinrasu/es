@@ -2,7 +2,9 @@ use core::cell::Cell;
 
 use smart_leds::RGB8;
 
+#[es_sim::export]
 const LEARN_STEPS: usize = 4;
+#[es_sim::export]
 const BRIGHTNESS_LEVELS: [u8; 3] = [96, 160, 255];
 const PALETTE_LIGHTNESS: f32 = 68.0;
 const PALETTE_CHROMA: f32 = 52.0;
@@ -11,6 +13,7 @@ const LEARN_MIN_GAP_MS: u32 = 90;
 const LEARN_MAX_GAP_MS: u32 = 900;
 const LEARN_BLINK_MS: u32 = 180;
 const RNG_FALLBACK_SEED: u32 = 0xC0DE_2560;
+#[es_sim::export]
 const DEFAULT_GAPS_MS: [u16; LEARN_STEPS] = [220, 150, 260, 340];
 const TIMER0_PRESCALER: u32 = 64;
 const TIMER0_COUNTS: u8 = 250;
@@ -518,5 +521,51 @@ pub(crate) fn run() -> ! {
             controller.render(&mut frame, now_ms);
             panel.write(&frame);
         }
+    }
+}
+
+#[es_sim::test]
+mod sim {
+    use es_sim::prelude::*;
+
+    use crate::f12a::LED_DATA_PIN;
+    use crate::key4b::{DEBOUNCE_MS, SW1_PIN, SW2_PIN, SW3_PIN, SW4_PIN};
+
+    fn release_all_buttons(sim: &mut Sim) {
+        sim.set_pin(SW1_PIN, true);
+        sim.set_pin(SW2_PIN, true);
+        sim.set_pin(SW3_PIN, true);
+        sim.set_pin(SW4_PIN, true);
+    }
+
+    #[es_sim::test(timeout_ms = 50)]
+    fn power_on_render_drives_led_data(sim: &mut Sim) {
+        release_all_buttons(sim);
+
+        let transitions = sim.capture_pin_transitions(LED_DATA_PIN, 25_000, 128);
+
+        assert!(!transitions.is_empty());
+        assert!(transitions.iter().any(|transition| transition.level));
+    }
+
+    #[es_sim::test(timeout_ms = 120)]
+    fn short_press_sw1_triggers_led_refresh(sim: &mut Sim) {
+        release_all_buttons(sim);
+
+        let startup_transitions = sim.capture_pin_transitions(LED_DATA_PIN, 25_000, 1_024);
+        assert!(!startup_transitions.is_empty());
+
+        sim.advance_ms(10);
+        assert_eq!(sim.count_pin_edges(LED_DATA_PIN, 1_000), 0);
+
+        sim.set_pin(SW1_PIN, false);
+        sim.advance_ms(DEBOUNCE_MS as u64 + 5);
+        sim.set_pin(SW1_PIN, true);
+
+        let press_transitions =
+            sim.capture_pin_transitions(LED_DATA_PIN, (DEBOUNCE_MS as u64 + 10) * 1_000, 128);
+
+        assert!(!press_transitions.is_empty());
+        assert!(sim.elapsed_ms() < super::DEFAULT_GAPS_MS[0] as u64);
     }
 }

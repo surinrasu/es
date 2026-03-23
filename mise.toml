@@ -195,3 +195,8 @@ if exist "%MSYS_ROOT%\ucrt64\bin\avr-gcc.exe" (
 
 endlocal
 '''
+
+[tasks.sim-test]
+description = "Run es-sim tests"
+run = "cargo test --manifest-path '{{config_root}}/es-sim/Cargo.toml' --target $(rustc -vV | sed -n 's/^host: //p')"
+dir = "/tmp"

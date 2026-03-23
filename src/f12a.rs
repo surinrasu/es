@@ -16,6 +16,8 @@ const HALF_PI: f32 = core::f32::consts::FRAC_PI_2;
 const TAU: f32 = PI * 2.0;
 const MEGA2560_D51_PORT_IO: u8 = 0x05;
 const MEGA2560_D51_PIN_BIT: u8 = 2;
+#[es_sim::export]
+pub(crate) const LED_DATA_PIN: es_sim::DigitalPin = es_sim::DigitalPin::new('B', 2);
 const LATCH_DELAY_US: u32 = 80;
 
 struct Lab {
