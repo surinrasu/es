@@ -5,7 +5,7 @@
 
 use panic_halt as _;
 
-#[es_entry::module(e1)]
+#[es_entry::module(e2)]
 fn main() -> ! {
     entry::run();
 }

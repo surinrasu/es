@@ -288,6 +288,7 @@ version = "0.1.0"
 dependencies = [
  "arduino-hal",
  "avr-device",
+ "embedded-hal 1.0.0",
  "es-entry",
  "es-sim",
  "nb 1.1.0",
